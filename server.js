@@ -37,9 +37,10 @@ app.get("/share/:id", (req, res) => {
     const description = "Predict real-world outcomes with SolBetX - an open-source, tokenless Smart contract prediction platform resolved by Truth.it network";
     const image = "https://solbetx.com/og/solbetx-preview.png";
     const redirectUrl = `https://solbetx.com/question/${id}`;
+    const shareUrl = `https://solbetx.com/share/${id}`;
 
     console.log("event title: ", title);
-    
+
     const html = `
         <!DOCTYPE html>
         <html lang="en">
@@ -49,7 +50,7 @@ app.get("/share/:id", (req, res) => {
                 <meta property="og:title" content="${title}" />
                 <meta property="og:description" content="${description}" />
                 <meta property="og:image" content="${image}" />
-                <meta property="og:url" content="${redirectUrl}" />
+                <meta property="og:url" content="${shareUrl}" />
                 <meta property="og:type" content="website" />
                 <meta name="twitter:card" content="summary_large_image" />
                 <meta name="twitter:title" content="${title}" />
