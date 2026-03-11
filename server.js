@@ -92,7 +92,25 @@ app.delete("/api/event/:id", (req, res) => {
     res.json({ success: true });
 });
 
+app.post("/api/btcpay/webhook", express.raw({ type: 'application/json' }), (req, res) => {
+    const signature = req.headers['btcpay-sig'];
+    const rawBody = req.body;
+    console.log("rawBou9dy", rawBody);
+    try {
+        const payload = JSON.parse(rawBody.toString()); 
+        console.log(payload);
+    } catch (err) {
+        console.error("Webhook JSON parse error:", err.message);
+        return res.status(400).send("Invalid JSON");
+    }
+
+    console.log(payload);
+    res.sendStatus(200);
+});
+
+
 
 app.listen(PORT, () => {
-    console.log(`OG metadata server running at http://localhost:${PORT}`);
+  console.log(`OG metadata server running at http://localhost:${PORT}`);
 });
+
