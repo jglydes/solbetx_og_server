@@ -129,18 +129,35 @@ app.post("/api/btcpay/webhook", express.raw({ type: 'application/json' }), (req,
 app.post("/api/subscriptions", async (req, res) => {
   try {
     const { site, email, eventId, types } = req.body;
-    if (!site || !email || !types?.length) {
-      return res.status(400).json({ error: "Missing required fields" });
+
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
+    const allowedSites = ["truthit", "solbetx", "predictsol"];
+    const allowedTypes = [
+      "commit_end",
+      "reveal_end",
+      "general_updates",
+      "event_updates",
+      "result"
+    ];
+
+    const cleanTypes = Array.isArray(types)
+      ? types.filter((t) => allowedTypes.includes(t))
+      : [];
+
+    if (!allowedSites.includes(site) || !normalizedEmail || cleanTypes.length === 0) {
+      return res.status(400).json({ error: "Missing or invalid required fields" });
     }
+
     const subscription = await Subscription.findOneAndUpdate(
       {
         site,
-        email,
+        email: normalizedEmail,
         eventId: eventId || null
       },
       {
-        $addToSet: { types: { $each: types } },
-        active: true
+        $addToSet: { types: { $each: cleanTypes } },
+        $set: { active: true }
       },
       {
         new: true,
@@ -148,7 +165,7 @@ app.post("/api/subscriptions", async (req, res) => {
       }
     );
 
-    res.json({success: true,subscription});
+    res.json({ success: true, subscription });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Subscription failed" });
@@ -158,9 +175,11 @@ app.post("/api/subscriptions", async (req, res) => {
 app.post("/api/subscriptions/unsubscribe", async (req, res) => {
   try {
     const { site, email, eventId, type } = req.body;
+    const normalizedEmail = String(email || "").trim().toLowerCase();
+
     const sub = await Subscription.findOne({
       site,
-      email,
+      email: normalizedEmail,
       eventId: eventId || null
     });
 
@@ -169,7 +188,7 @@ app.post("/api/subscriptions/unsubscribe", async (req, res) => {
     }
 
     if (type) {
-      sub.types = sub.types.filter(t => t !== type);
+      sub.types = sub.types.filter((t) => t !== type);
       if (sub.types.length === 0) {
         sub.active = false;
       }
@@ -188,22 +207,41 @@ app.post("/api/subscriptions/unsubscribe", async (req, res) => {
 app.get("/api/subscriptions", async (req, res) => {
   try {
     const { site, type, eventId } = req.query;
-    const filter = {active: true};
+    const filter = { active: true };
 
     if (site) filter.site = site;
     if (type) filter.types = type;
     if (eventId) filter.eventId = eventId;
 
-    const subs = await Subscription.find(filter).select("email");
+    const emails = await Subscription.distinct("email", filter);
 
     res.json({
       success: true,
-      count: subs.length,
-      emails: subs.map(s => s.email)
+      count: emails.length,
+      emails
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Failed to fetch subscriptions" });
+  }
+});
+
+app.get("/api/notifications/truthit-upcoming", async (req, res) => {
+  try {
+    const mod = await import("./getUpcomingTruthNotifications.mjs");
+    const jobs = await mod.getUpcomingTruthNotifications();
+
+    res.json({
+      success: true,
+      count: jobs.length,
+      jobs
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch upcoming truth notifications"
+    });
   }
 });
 
