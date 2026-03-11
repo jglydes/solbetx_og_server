@@ -2,6 +2,20 @@ const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
+const dotenv = require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+
+const mongoose = require("mongoose");
+const Subscription = require("./models/Subscription");
+
+console.log("env: ", process.env)
+mongoose.connect(process.env.MONGODB_URL, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+});
+
+mongoose.connection.once("open", () => {
+  console.log("MongoDB connected");
+});
 
 const app = express();
 app.use(cors());
@@ -109,8 +123,91 @@ app.post("/api/btcpay/webhook", express.raw({ type: 'application/json' }), (req,
 });
 
 
+/**
+ * Notifications: Subscription endpoints
+ */
+app.post("/api/subscriptions", async (req, res) => {
+  try {
+    const { site, email, eventId, types } = req.body;
+    if (!site || !email || !types?.length) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+    const subscription = await Subscription.findOneAndUpdate(
+      {
+        site,
+        email,
+        eventId: eventId || null
+      },
+      {
+        $addToSet: { types: { $each: types } },
+        active: true
+      },
+      {
+        new: true,
+        upsert: true
+      }
+    );
 
-app.listen(PORT, () => {
-  console.log(`OG metadata server running at http://localhost:${PORT}`);
+    res.json({success: true,subscription});
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Subscription failed" });
+  }
 });
 
+app.post("/api/subscriptions/unsubscribe", async (req, res) => {
+  try {
+    const { site, email, eventId, type } = req.body;
+    const sub = await Subscription.findOne({
+      site,
+      email,
+      eventId: eventId || null
+    });
+
+    if (!sub) {
+      return res.status(404).json({ error: "Subscription not found" });
+    }
+
+    if (type) {
+      sub.types = sub.types.filter(t => t !== type);
+      if (sub.types.length === 0) {
+        sub.active = false;
+      }
+    } else {
+      sub.active = false;
+    }
+
+    await sub.save();
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Unsubscribe failed" });
+  }
+});
+
+app.get("/api/subscriptions", async (req, res) => {
+  try {
+    const { site, type, eventId } = req.query;
+    const filter = {active: true};
+
+    if (site) filter.site = site;
+    if (type) filter.types = type;
+    if (eventId) filter.eventId = eventId;
+
+    const subs = await Subscription.find(filter).select("email");
+
+    res.json({
+      success: true,
+      count: subs.length,
+      emails: subs.map(s => s.email)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch subscriptions" });
+  }
+});
+
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`OG metadata server running at http://localhost:${PORT}`);
+});
